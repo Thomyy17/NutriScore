@@ -42,40 +42,83 @@ st.markdown("""
         border: 2px solid #D32F2F;
         color: #B71C1C;
     }
-    .nutri-badge {
-        display: inline-block;
-        padding: 6px 14px;
+    
+    /* Celá škála Nutri-Score A-E */
+    .nutriscore-wrapper {
+        text-align: center;
+        background: #F8F9FA;
+        padding: 14px 10px;
+        border-radius: 16px;
+        border: 1px solid #E0E0E0;
+    }
+    .nutriscore-scale {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+    }
+    .nutri-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
         border-radius: 8px;
         font-weight: 800;
-        font-size: 1.2rem;
         color: white;
+        transition: all 0.2s ease-in-out;
     }
-    .nutri-A { background-color: #038141; }
-    .nutri-B { background-color: #85BB2F; }
-    .nutri-C { background-color: #FECB02; color: black; }
-    .nutri-D { background-color: #EE8100; }
-    .nutri-E { background-color: #E63E11; }
-    .ingredient-card {
-        padding: 10px 14px;
-        border-radius: 10px;
-        margin-bottom: 8px;
+    .nutri-box.inactive {
+        width: 32px;
+        height: 38px;
+        font-size: 1.1rem;
+        opacity: 0.35;
+    }
+    .nutri-box.active {
+        width: 48px;
+        height: 56px;
+        font-size: 1.8rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        border: 3px solid #222;
+        transform: scale(1.1);
+        z-index: 2;
+    }
+    .nutri-box.A { background-color: #038141; }
+    .nutri-box.B { background-color: #85BB2F; }
+    .nutri-box.C { background-color: #FECB02; color: #222; }
+    .nutri-box.D { background-color: #EE8100; }
+    .nutri-box.E { background-color: #E63E11; }
+    
+    .child-card {
+        padding: 14px 18px;
+        border-radius: 14px;
+        margin-bottom: 16px;
+    }
+    .child-suitable {
+        background-color: #E8F5E9;
+        border-left: 6px solid #2E7D32;
+    }
+    .child-unsuitable {
+        background-color: #FFEBEE;
+        border-left: 6px solid #D32F2F;
+    }
+    .child-caution {
+        background-color: #FFF3E0;
+        border-left: 6px solid #F57C00;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- Získání Gemini API Klíče ---
 def get_api_key():
-    # 1. Ze Streamlit secrets (Streamlit Cloud)
     if "GEMINI_API_KEY" in st.secrets:
         return st.secrets["GEMINI_API_KEY"]
-    # 2. Z proměnné prostředí
     env_key = os.getenv("GEMINI_API_KEY")
     if env_key:
         return env_key
-    # 3. Zadaný uživatelem v postranním panelu
     return st.session_state.get("custom_api_key", "")
 
-# --- Volání Gemini REST API s automatickým přepínáním modelů (Fallback proti chybě 503) ---
+# --- Volání Gemini REST API s automatickým přepínáním modelů ---
 MODELS_TO_TRY = [
     "gemini-flash-latest",
     "gemini-3.1-flash-lite-preview",
@@ -87,15 +130,16 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: 
     base64_img = base64.b64encode(image_bytes).decode("utf-8")
     
     prompt = """
-    Jsi expertní nutriční specialista a biochemik specializující se na analýzu složení potravin a aditiv.
-    Analyzuj přiloženou fotografii složení potraviny (ingredience a nutriční tabulku).
+    Jsi expertní nutriční specialista a certifikovaný biochemik specializující se na analýzu složení potravin a aditiv.
+    Analyzuj přiloženou fotografii složení potraviny (ingredience a případně nutriční tabulku).
     
-    Zkontroluj:
+    Detailně zkontroluj:
     1. Všechny ingredience (pořadí určuje množství v potravině).
-    2. Detekuj rizikové látky: přidaný cukr (glukózo-fruktózový sirup), palmový tuk, transmastné kyseliny, přemíru soli.
-    3. Identifikuj éčka s kódy E-XXX, popiš jejich bezpečnost a účel.
-    4. Zhodnoť celkovou zdravost na škále 0-100 a urči Nutri-Score (A-E).
-    5. Pokud obrázek NEOBSAHUJE potravinu ani její složení, nastav verdict na "NOT_FOOD".
+    2. Detekuj rizikové látky: přidaný cukr (glukózo-fruktózový sirup, maltodextrin), palmový tuk, ztužené tuky, transmastné kyseliny, přemíru soli.
+    3. Identifikuj všechna éčka s kódy E-XXX. U KAŽDÉHO NEZDRAVÉHO/RIZIKOVÉHO ÉČKA detailně popiš v poli 'healthEffects', CO V TĚLE ZPŮSOBUJE (např. hyperaktivita u dětí, alergie, kožní vyrážky, zažívací potíže, karcinogenní potenciál při vysokých dávkách apod.).
+    4. Zhodnoť, zda je potravina vhodná pro děti (suitableForChildren: true/false). Uveď detailní důvod v 'childrenSuitabilityReason', proč ano či proč ne (např. moc cukru, umělá barviva způsobující nepozornost, kofein, riziková éčka).
+    5. Zhodnoť celkovou zdravost na škále 0-100 a urči Nutri-Score (A, B, C, D nebo E).
+    6. Pokud obrázek NEOBSAHUJE potravinu ani její složení, nastav verdict na "NOT_FOOD".
     
     Vrať POUZE validní JSON v tomto přesném formátu bez jakéhokoliv dalšího textu okolo:
     {
@@ -105,6 +149,9 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: 
       "verdictTitle": "Zdravá volba",
       "summary": "Stručné české shrnutí v 2-3 větách, zda je potravina zdravá a proč.",
       "nutriScore": "B",
+      "suitableForChildren": true,
+      "childrenSuitabilityVerdict": "Vhodné pro děti / Nevhodné pro děti / Omezeně pro děti",
+      "childrenSuitabilityReason": "Konkrétní vysvětlení, proč je/není vhodné pro děti.",
       "positiveIngredients": ["Ovesné vločky (vláknina)", "Ořechy"],
       "concerningIngredients": [
         {
@@ -115,15 +162,16 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: 
       ],
       "additives": [
         {
-          "code": "E322",
-          "name": "Sójový lecitin",
-          "purpose": "Emulgátor",
-          "safetyNote": "Přírodní, bezpečný",
-          "risk": "SAFE"
+          "code": "E250",
+          "name": "Dusitan sodný",
+          "purpose": "Konzervant",
+          "safetyNote": "Syntetický konzervant masa",
+          "risk": "HARMFUL",
+          "healthEffects": "Při zahřátí může tvořit karcinogenní nitrosaminy; může vyvolat bolesti hlavy nebo alergické reakce."
         }
       ],
       "recommendation": "Vhodné pro běžnou konzumaci jako součást pestré stravy.",
-      "healthierAlternative": "Vyzkoušejte ovesné vločky bez přidaného cukru s ovocem.",
+      "healthierAlternative": "Vyzkoušejte ovesné vločky bez přidaného cukru s čerstvým ovocem.",
       "rawIngredientsText": "Přepsané detekované složení..."
     }
     """
@@ -148,9 +196,8 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: 
         }
     }
 
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json; charset=utf-8"}
     
-    # Seznam modelů k pokusu
     candidate_models = [preferred_model] if preferred_model != "Automaticky" else MODELS_TO_TRY
     if preferred_model != "Automaticky" and preferred_model not in candidate_models:
         candidate_models = [preferred_model] + [m for m in MODELS_TO_TRY if m != preferred_model]
@@ -163,7 +210,6 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: 
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=60)
             
-            # Pokud model hlásí 503 (vytíženo) nebo 429 (limit), zkusíme okamžitě další model
             if response.status_code in [503, 429]:
                 last_error = f"Model {model_name} je dočasně přetížen ({response.status_code})."
                 continue
@@ -180,7 +226,6 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: 
                 
             text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
             
-            # Vyčištění případných markdown značek
             cleaned = text_content.strip()
             if cleaned.startswith("```json"):
                 cleaned = cleaned[7:]
@@ -207,6 +252,7 @@ def ask_followup_question(analysis: dict, question: str, api_key: str, model: st
     - Složení: {analysis.get('rawIngredientsText')}
     - Pozitiva: {', '.join(analysis.get('positiveIngredients', []))}
     - Rizika: {', '.join([c.get('name') for c in analysis.get('concerningIngredients', [])])}
+    - Pro děti: {analysis.get('childrenSuitabilityVerdict')} ({analysis.get('childrenSuitabilityReason')})
     
     Otázka uživatele: "{question}"
     Odpověz věcně a srozumitelně v češtině (1-2 odstavce).
@@ -219,39 +265,78 @@ def ask_followup_question(analysis: dict, question: str, api_key: str, model: st
     for m in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
         try:
-            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json; charset=utf-8"}, timeout=30)
             if res.status_code == 200:
                 return res.json()["candidates"][0]["content"]["parts"][0]["text"]
         except Exception:
             continue
     return "Omlouvám se, na dotaz se nepodařilo odpovědět."
 
-# --- Pomocná funkce pro ukázkové štítky ---
-def generate_sample_image(text: str) -> bytes:
-    img = Image.new('RGB', (700, 450), color=(250, 248, 245))
+# --- Pomocná funkce pro bezchybnou tvorbu českých ukázkových štítků s diakritikou ---
+def get_unicode_font(size=22, bold=False):
+    font_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "DejaVuSans.ttf",
+        "arial.ttf"
+    ]
+    for fp in font_candidates:
+        if os.path.exists(fp):
+            try:
+                return ImageFont.truetype(fp, size)
+            except Exception:
+                pass
+    return ImageFont.load_default()
+
+def generate_sample_image(title: str, text: str, nutrients: str = "") -> bytes:
+    # Vytvoření štítku s vysokým rozlišením pro precizní OCR
+    width, height = 900, 520
+    img = Image.new('RGB', (width, height), color=(252, 250, 246))
     draw = ImageDraw.Draw(img)
-    draw.rectangle([20, 20, 680, 430], outline=(180, 180, 180), width=3)
-    draw.text((40, 40), "ETIKETA VÝROBKU - SLOŽENÍ", fill=(30, 80, 50))
     
+    # Rámeček obalu
+    draw.rectangle([25, 25, width - 25, height - 25], outline=(200, 200, 200), width=3)
+    
+    font_header = get_unicode_font(28, bold=True)
+    font_sub = get_unicode_font(22, bold=True)
+    font_text = get_unicode_font(20, bold=False)
+    
+    draw.text((45, 45), f"ETIKETA: {title}", fill=(20, 75, 45), font=font_header)
+    draw.line([(45, 85), (width - 45, 85)], fill=(210, 210, 210), width=2)
+    
+    draw.text((45, 100), "SLOŽENÍ VÝROBKU:", fill=(30, 30, 30), font=font_sub)
+    
+    # Zalamování českého textu
     words = text.split(" ")
     lines = []
     curr = ""
     for w in words:
-        if len(curr + " " + w) < 45:
-            curr = curr + " " + w if curr else w
+        test_line = f"{curr} {w}".strip()
+        # Měření šířky
+        bbox = draw.textbbox((0, 0), test_line, font=font_text)
+        if (bbox[2] - bbox[0]) < 800:
+            curr = test_line
         else:
             lines.append(curr)
             curr = w
     if curr:
         lines.append(curr)
         
-    y = 90
+    y = 135
     for l in lines:
-        draw.text((40, y), l, fill=(40, 40, 40))
-        y += 26
+        draw.text((45, y), l, fill=(45, 45, 45), font=font_text)
+        y += 28
+        
+    if nutrients:
+        draw.line([(45, y + 10), (width - 45, y + 10)], fill=(210, 210, 210), width=2)
+        y += 22
+        draw.text((45, y), "VÝŽIVOVÉ ÚDAJE NA 100g:", fill=(30, 30, 30), font=font_sub)
+        y += 30
+        draw.text((45, y), nutrients, fill=(60, 60, 60), font=font_text)
         
     buf = BytesIO()
-    img.save(buf, format="JPEG")
+    img.save(buf, format="JPEG", quality=95)
     return buf.getvalue()
 
 # --- Postranní panel ---
@@ -276,49 +361,65 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("""
     **NutriCheck Web**
-    Vyfoťte složení potraviny svým telefonem a nechte AI vyhodnotit:
+    Vyfoťte složení potraviny a nechte AI vyhodnotit:
     - 🥗 Zda je potravina zdravá
-    - 📊 Nutri-Score (A–E)
+    - 👶 Zda je vhodná pro děti a proč
+    - 📊 Celou škálu Nutri-Score (A–E)
     - ⚠️ Skrytý cukr a rizikové tuky
-    - 🧪 Seznam a bezpečnost éček
+    - 🧪 Seznam éček a co konkrétně způsobují
     """)
 
 # --- Hlavní zobrazení ---
 st.markdown("<div class='main-header'><h1>🥗 NutriCheck AI</h1><p>Vyfoťte složení potraviny a zjistěte, zda je zdravá</p></div>", unsafe_allow_html=True)
 
-# Vstupy: Fotoaparát telefonu vs Nahrání souboru vs Ukázka
-tab_camera, tab_upload, tab_sample = st.tabs(["📸 Vyfotit fotoaparátem", "📁 Nahrát obrázek", "💡 Vyzkoušet ukázku"])
+# Vstupy: Zadní fotoaparát vs Nahrání souboru vs Ukázka
+tab_camera, tab_upload, tab_sample = st.tabs([
+    "📷 Vyfotit fotoaparátem", 
+    "📁 Nahrát z galerie", 
+    "💡 Vyzkoušet ukázku"
+])
 
 image_to_analyze = None
 
 with tab_camera:
-    st.info("💡 Na mobilu po kliknutí níže můžete přímo použít zadní fotoaparát vašeho telefonu.")
-    camera_pic = st.camera_input("Vyfoťte etiketu se složením:")
+    st.markdown("##### 📸 Vyfotit zadním fotoaparátem mobilu")
+    st.info("💡 **Doporučení pro mobily:** Pro automatické spuštění zadního fotoaparátu můžete použít tlačítko níže:")
+    
+    # Streamlit camera input
+    camera_pic = st.camera_input("Zamiřte fotoaparát na složení:")
     if camera_pic:
         image_to_analyze = camera_pic.getvalue()
 
 with tab_upload:
-    uploaded_pic = st.file_uploader("Nahrajte fotku složení z galerie:", type=["jpg", "jpeg", "png", "webp"])
+    st.markdown("##### 📁 Nahrát fotografii z telefonu")
+    st.caption("Na mobilu po kliknutí na tlačítko můžete přímo zvolit 'Fotoaparát' (otevře výchozí zadní kameru) nebo vybrat již vyfocenou fotku z galerie.")
+    uploaded_pic = st.file_uploader("Vyberte snímek etikety:", type=["jpg", "jpeg", "png", "webp"])
     if uploaded_pic:
         image_to_analyze = uploaded_pic.getvalue()
 
 with tab_sample:
-    st.write("Nemáte u sebe potravinu? Vyberte si ukázku:")
+    st.write("Nemáte u sebe potravinu? Vyberte si ukázku s českou diakritikou:")
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("🥣 Ovesné vločky (Zdravé)"):
+        if st.button("🥣 Ovesné vločky"):
             image_to_analyze = generate_sample_image(
-                "Celozrnné ovesné vločky 75%, pražené lískové ořechy 10%, lněná semínka 8%, chia semínka 7%. Výživové hodnoty na 100g: Vláknina 11.5g, Bílkoviny 14g, Cukry 1.6g, Nasycené tuky 1.5g."
+                title="Bio Ovesné vločky s oříšky",
+                text="Celozrnné ovesné vločky 75 %, pražené lískové ořechy 10 %, lněná semínka 8 %, dýňová a chia semínka 7 %. Přírodní produkt bez přidaného cukru a bez konzervantů.",
+                nutrients="Energie: 1650 kJ / 393 kcal | Vláknina: 11,6 g | Bílkoviny: 14,2 g | Cukry: 1,8 g"
             )
     with col2:
-        if st.button("🍫 Čokoládová tyčinka (Nezdravé)"):
+        if st.button("🍫 Čokoládová tyčinka"):
             image_to_analyze = generate_sample_image(
-                "Cukr, glukózovo-fruktózový sirup, palmový tuk, kakaové máslo, sušené plnotučné mléko, emulgátor E322 (sójový lecitin), E476, umělá aromata, sůl. Cukry 55g na 100g, nasycený tuk 18g."
+                title="Karamelová čokoládová tyčinka",
+                text="Cukr, glukózovo-fruktózový sirup, palmový tuk, kakaové máslo, sušené odstředěné mléko, emulgátor E322 (sójový lecitin), polyglycerolpolyricinoleát E476, umělá aromata, jedlá sůl.",
+                nutrients="Energie: 2180 kJ / 522 kcal | Cukry: 51,4 g | Nasycené mastné kyseliny: 16,8 g"
             )
     with col3:
-        if st.button("🥫 Paštika s éčky"):
+        if st.button("🥫 Masová paštika"):
             image_to_analyze = generate_sample_image(
-                "Vepřové sádlo, vepřové maso 20%, voda, játra 15%, škrob E1422, solicí směs (jedlá sůl, konzervant: dusitan sodný E250), stabilizátory E450, E451, glutamát sodný E621, sůl 2.1g."
+                title="Jemná játrová paštika",
+                text="Vepřové sádlo, vepřové maso 25 %, voda, vepřová játra 18 %, škrob E1422, solicí směs (jedlá sůl, konzervant: dusitan sodný E250), stabilizátory E450 a E451, glutamát sodný E621.",
+                nutrients="Tuky: 31,0 g | Nasycené tuky: 11,5 g | Sůl: 1,9 g"
             )
 
 # Analýza obrázku
@@ -327,9 +428,9 @@ if image_to_analyze:
     if not api_key:
         st.warning("⚠️ Pro spuštění analýzy prosím vložte Gemini API klíč v levém panelu nebo jej nastavte v nastavení Streamlit Secrets.")
     else:
-        st.image(image_to_analyze, caption="Vyfocená etiketa", use_container_width=True)
+        st.image(image_to_analyze, caption="Analyzovaný snímek", use_container_width=True)
         
-        with st.spinner("🤖 Gemini AI čte text z etikety, analyzuje nutrienty a ověřuje éčka..."):
+        with st.spinner("🤖 Gemini AI čte české složení z etikety, ověřuje éčka a vhodnost pro děti..."):
             try:
                 res, used_model = analyze_food_with_gemini(image_to_analyze, api_key, model_choice)
                 res["_used_model"] = used_model
@@ -348,32 +449,58 @@ if "last_analysis" in st.session_state:
     
     score = res.get("healthScore", 50)
     verdict = res.get("verdict", "MODERATE")
-    nutri = res.get("nutriScore", "C").upper()
+    active_nutri = res.get("nutriScore", "C").strip().upper()
     
     # Barevná karta se skóre
     score_class = "score-healthy" if score >= 70 else ("score-moderate" if score >= 45 else "score-unhealthy")
     
-    col_score, col_nutri = st.columns([2, 1])
+    col_score, col_nutri = st.columns([1, 1])
     with col_score:
         st.markdown(f"""
         <div class='score-card {score_class}'>
-            <h2 style='margin:0; font-size: 2.2rem;'>{score} / 100</h2>
-            <p style='margin:0; font-weight: bold;'>{res.get('verdictTitle', '')}</p>
+            <p style='margin:0 0 4px 0; font-size: 0.9rem; text-transform: uppercase;'>Skóre zdravosti</p>
+            <h2 style='margin:0; font-size: 2.4rem;'>{score} / 100</h2>
+            <p style='margin:4px 0 0 0; font-weight: bold;'>{res.get('verdictTitle', '')}</p>
         </div>
         """, unsafe_allow_html=True)
         
     with col_nutri:
+        # CELÁ ŠKÁLA NUTRI-SCORE A-E SE ZVÝRAZNĚNÝM SKÓRE
+        grades = ["A", "B", "C", "D", "E"]
+        scale_html = "<div class='nutriscore-scale'>"
+        for g in grades:
+            is_active = (g == active_nutri)
+            cls = "active" if is_active else "inactive"
+            scale_html += f"<div class='nutri-box {g} {cls}'>{g}</div>"
+        scale_html += "</div>"
+        
         st.markdown(f"""
-        <div style='text-align: center; padding: 1.2rem; background: #F5F5F5; border-radius: 16px;'>
-            <p style='margin:0 0 6px 0; font-size: 0.85rem; color: #666;'>NUTRI-SCORE</p>
-            <span class='nutri-badge nutri-{nutri}'>{nutri}</span>
+        <div class='nutriscore-wrapper'>
+            <p style='margin:0; font-size: 0.85rem; font-weight: bold; color: #555;'>OFICIÁLNÍ ŠKÁLA NUTRI-SCORE</p>
+            {scale_html}
+            <p style='margin:6px 0 0 0; font-size: 0.85rem; color: #333;'>Výsledná známka: <b>{active_nutri}</b></p>
         </div>
         """, unsafe_allow_html=True)
 
-    # Shrnutí
+    # 1. VHODNOST PRO DĚTI (Nové a požadované)
+    suitable_children = res.get("suitableForChildren", True)
+    child_verdict = res.get("childrenSuitabilityVerdict", "Vhodné pro děti" if suitable_children else "Nevhodné pro děti")
+    child_reason = res.get("childrenSuitabilityReason", "")
+    
+    child_class = "child-suitable" if suitable_children else "child-unsuitable"
+    child_icon = "👶✅" if suitable_children else "👶⚠️"
+    
+    st.markdown(f"""
+    <div class='child-card {child_class}'>
+        <h4 style='margin:0 0 6px 0;'>{child_icon} Vhodnost pro děti: <b>{child_verdict}</b></h4>
+        <p style='margin:0; font-size: 0.95rem;'>{child_reason}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. Celkové shrnutí
     st.info(f"**Shrnutí složení:**\n\n{res.get('summary', '')}")
     
-    # Pozitiva vs Rizika
+    # 3. Pozitiva vs Rizika
     col_pos, col_neg = st.columns(2)
     with col_pos:
         st.success("✅ **Zdravé a přínosné složky:**")
@@ -393,40 +520,48 @@ if "last_analysis" in st.session_state:
         else:
             st.write("Nebyly zjištěny rizikové složky.")
 
-    # Éčka a aditiva
+    # 4. ÉČKA A CO ZPŮSOBUJÍ (Nové a požadované)
     additives = res.get("additives", [])
     if additives:
-        with st.expander(f"🧪 Detekovaná éčka a aditiva ({len(additives)})"):
+        with st.expander(f"🧪 Detekovaná éčka a jejich zdravotní dopady ({len(additives)})", expanded=True):
             for a in additives:
                 risk_emoji = "🟢" if a.get("risk") == "SAFE" else ("🟠" if a.get("risk") == "CAUTION" else "🔴")
-                st.write(f"{risk_emoji} **{a.get('code')} - {a.get('name')}** ({a.get('purpose', '')})")
-                if a.get("safetyNote"):
-                    st.caption(a.get("safetyNote"))
+                risk_label = "Bezpečné" if a.get("risk") == "SAFE" else ("S výhradami" if a.get("risk") == "CAUTION" else "Rizikové / Škodlivé")
+                
+                st.markdown(f"**{risk_emoji} {a.get('code')} – {a.get('name')}** *({a.get('purpose', 'Aditivum')})* – `{risk_label}`")
+                
+                # Zdravotní dopad
+                effects = a.get("healthEffects")
+                if effects:
+                    st.markdown(f"> **⚠️ Co v těle způsobuje:** {effects}")
+                elif a.get("safetyNote"):
+                    st.caption(f"Poznámka: {a.get('safetyNote')}")
+                st.markdown("---")
 
-    # Doporučení a alternativa
+    # 5. Doporučení a alternativa
     st.markdown(f"💡 **Doporučení ke konzumaci:** {res.get('recommendation', '')}")
     if res.get("healthierAlternative"):
         st.markdown(f"🌱 **Zdravější alternativa:** {res.get('healthierAlternative', '')}")
 
-    # Interaktivní dotazy na Gemini
+    # 6. Interaktivní dotazy na Gemini
     st.markdown("---")
     st.subheader("💬 Zeptejte se Gemini na toto složení")
     q_col1, q_col2, q_col3 = st.columns(3)
     quick_q = None
     with q_col1:
-        if st.button("Obsahuje alergeny?"):
-            quick_q = "Obsahuje tato potravina lepek, laktózu či jiné běžné alergeny?"
+        if st.button("Alergeny v produktu?"):
+            quick_q = "Obsahuje tato potravina lepek, laktózu, sóju či ořechy?"
     with q_col2:
-        if st.button("Je vhodná pro děti?"):
-            quick_q = "Je toto složení vhodné pro malé děti?"
-    with q_col3:
-        if st.button("Hodí se při dietě?"):
+        if st.button("Je vhodné při hubnutí?"):
             quick_q = "Hodí se tato potravina při redukční dietě na hubnutí?"
+    with q_col3:
+        if st.button("Vliv na trávení?"):
+            quick_q = "Jak tato potravina ovlivňuje zažívání a střevní mikrobiom?"
 
     user_q = st.text_input("Nebo napište vlastní dotaz:", value=quick_q if quick_q else "")
     if st.button("Odeslat dotaz"):
         if user_q:
             api_key = get_api_key()
             with st.spinner("Gemini odpovídá..."):
-                answer = ask_followup_question(res, user_q, api_key)
+                answer = ask_followup_question(res, user_q, api_key, res.get("_used_model", "gemini-flash-latest"))
                 st.write(f"**Odpověď:** {answer}")

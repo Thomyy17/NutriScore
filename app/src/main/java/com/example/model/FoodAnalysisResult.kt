@@ -15,6 +15,9 @@ data class FoodAnalysisResult(
     val additives: List<AdditiveInfo> = emptyList(),
     val recommendation: String = "",
     val healthierAlternative: String = "",
+    val suitableForChildren: Boolean = true,
+    val childrenSuitabilityVerdict: String = "Vhodné pro děti",
+    val childrenSuitabilityReason: String = "",
     val rawIngredientsText: String = "",
     val timestamp: Long = System.currentTimeMillis()
 )
@@ -32,7 +35,8 @@ data class AdditiveInfo(
     val name: String, // e.g. "Dusitan sodný"
     val purpose: String = "", // e.g. "Konzervant"
     val safetyNote: String = "",
-    val risk: String = "CAUTION" // SAFE, CAUTION, HARMFUL
+    val risk: String = "CAUTION", // SAFE, CAUTION, HARMFUL
+    val healthEffects: String = "" // Co konkrétně způsobuje (např. hyperaktivita, zažívací potíže, alergie)
 )
 
 enum class HealthVerdict {

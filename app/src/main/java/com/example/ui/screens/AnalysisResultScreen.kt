@@ -329,6 +329,46 @@ private fun SuccessResultView(
                 }
             }
 
+            // Vhodnost pro děti Card
+            item {
+                val childBg = if (result.suitableForChildren) HealthyGreenLight else DangerRedLight
+                val childColor = if (result.suitableForChildren) HealthyGreen else DangerRed
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = childBg.copy(alpha = 0.65f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (result.suitableForChildren) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = childColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Vhodnost pro děti: ${result.childrenSuitabilityVerdict}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = childColor
+                            )
+                        }
+                        if (result.childrenSuitabilityReason.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = result.childrenSuitabilityReason,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             // Concerning Ingredients (Warning)
             if (result.concerningIngredients.isNotEmpty()) {
                 item {
@@ -769,6 +809,15 @@ private fun AdditiveCard(additive: AdditiveInfo) {
                         text = "${additive.purpose}: ${additive.safetyNote}".trim().removePrefix(": "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (additive.healthEffects.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "⚠️ Dopad na zdraví: ${additive.healthEffects}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (additive.risk == "HARMFUL") DangerRed else Color(0xFFD84315),
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }

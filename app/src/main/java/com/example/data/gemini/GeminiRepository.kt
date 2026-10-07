@@ -44,9 +44,10 @@ class GeminiRepository(
                 Detailně zkontroluj:
                 1. Všechny ingredience (pořadí určuje množství v potravině).
                 2. Detekuj rizikové látky: přidaný cukr (glukózo-fruktózový sirup, maltodextrin), palmový tuk, ztužené tuky, transmastné kyseliny, nadbytek soli.
-                3. Identifikuj všechna éčka (aditiva) s kódy E-XXX, popiš jejich bezpečnost (zda jsou bezpečná, podezřelá nebo škodlivá).
-                4. Zhodnoť celkovou zdravost na škále 0-100 a stanov Nutri-Score (A-E).
-                5. Pokud obrázek NEOBSAHUJE složení potraviny ani potravinový obal, nastav verdict na "NOT_FOOD".
+                3. Identifikuj všechna éčka (aditiva) s kódy E-XXX, popiš jejich bezpečnost a U KAŽDÉHO NEZDRAVÉHO/RIZIKOVÉHO ÉČKA UVEĎ KONKRÉTNĚ, CO V TĚLE ZPŮSOBUJE (např. hyperaktivita u dětí, alergie, zažívací potíže, karcinogenní potenciál apod.).
+                4. Zhodnoť, zda je potravina vhodná pro děti (a pokud ne, přesně uveď proč).
+                5. Zhodnoť celkovou zdravost na škále 0-100 a stanov Nutri-Score (A-E).
+                6. Pokud obrázek NEOBSAHUJE složení potraviny ani potravinový obal, nastav verdict na "NOT_FOOD".
                 
                 Odpověz POUZE validním JSON objektem v přesně tomto schématu bez jakéhokoliv dalšího textu okolo:
                 {
@@ -56,6 +57,9 @@ class GeminiRepository(
                   "verdictTitle": "Zdravá volba",
                   "summary": "Stručné, jasné a srozumitelné shrnutí pro spotřebitele v češtině (2-3 věty), zda je potravina zdravá a proč.",
                   "nutriScore": "B",
+                  "suitableForChildren": true,
+                  "childrenSuitabilityVerdict": "Vhodné pro děti / Nevhodné pro děti / Omezeně pro děti",
+                  "childrenSuitabilityReason": "Detailní vysvětlení, proč potravina je/není vhodná pro děti (např. příliš volného cukru, umělá barviva způsobující nepozornost, kofein, vysoký obsah soli).",
                   "positiveIngredients": ["Ovesné vločky (vysoký obsah vlákniny)", "Lískové ořechy"],
                   "concerningIngredients": [
                     {
@@ -66,11 +70,12 @@ class GeminiRepository(
                   ],
                   "additives": [
                     {
-                      "code": "E322",
-                      "name": "Sójový lecitin",
-                      "purpose": "Emulgátor",
-                      "safetyNote": "Přírodní původ, bezpečný",
-                      "risk": "SAFE"
+                      "code": "E250",
+                      "name": "Dusitan sodný",
+                      "purpose": "Konzervant",
+                      "safetyNote": "Syntetický konzervant masa",
+                      "risk": "HARMFUL",
+                      "healthEffects": "Při zahřátí a v žaludku může tvořit karcinogenní nitrosaminy; může vyvolat bolesti hlavy nebo alergické reakce."
                     }
                   ],
                   "recommendation": "Vhodné pro běžnou konzumaci jako součást pestré stravy.",
