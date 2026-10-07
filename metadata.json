@@ -1,0 +1,6 @@
+{
+  "name": "NutriCheck",
+  "description": "Vyfoťte složení potraviny a nechte Gemini AI vyhodnotit, zda je produkt zdravý a jaká obsahuje aditiva či nutrienty.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

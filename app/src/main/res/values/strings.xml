@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">NutriCheck</string>
+    <string name="camera_permission_title">Potřebujeme přístup k fotoaparátu</string>
+    <string name="camera_permission_desc">Pro vyfocení a okamžitou analýzu složení potraviny potřebuje NutriCheck povolení k fotoaparátu.</string>
+    <string name="grant_permission_btn">Povolit fotoaparát</string>
+    <string name="scan_instructions">Zamiřte rámeček na text se složením potraviny</string>
+    <string name="take_photo">Vyfotit složení</string>
+    <string name="choose_gallery">Vybrat z galerie</string>
+    <string name="try_sample">Vyzkoušet na ukázce</string>
+    <string name="analyzing_title">Gemini AI analyzuje složení...</string>
+    <string name="analyzing_subtitle">Čteme ingredience, počítáme skóre a ověřujeme aditiva</string>
+    <string name="health_score_title">Skóre zdravosti</string>
+    <string name="summary_title">Shrnutí složení</string>
+    <string name="positives_title">Zdravé a přínosné složky</string>
+    <string name="concerns_title">Problematické složky a rizika</string>
+    <string name="additives_title">Detekovaná éčka a aditiva</string>
+    <string name="recommendation_title">Doporučení ke konzumaci</string>
+    <string name="alternative_title">Zdravější alternativa</string>
+    <string name="scan_again_btn">Vyfotit další potravinu</string>
+    <string name="history_title">Historie skenů</string>
+    <string name="no_history">Zatím jste nenaskenovali žádnou potravinu.</string>
+    <string name="ask_question_placeholder">Položit otázku k tomuto složení...</string>
+</resources>
