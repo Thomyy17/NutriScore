@@ -227,7 +227,7 @@ private fun CameraViewfinderContent(
                         it.surfaceProvider = previewView.surfaceProvider
                     }
                     val capture = ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                         .build()
                     imageCapture = capture
 
@@ -245,6 +245,23 @@ private fun CameraViewfinderContent(
                         // Handled
                     }
                 }, ContextCompat.getMainExecutor(ctx))
+
+                // Tap-to-focus
+                previewView.setOnTouchListener { v, event ->
+                    if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                        val factory = previewView.meteringPointFactory
+                        val point = factory.createPoint(event.x, event.y)
+                        val action = androidx.camera.core.FocusMeteringAction.Builder(
+                            point,
+                            androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE
+                        ).setAutoCancelDuration(4, java.util.concurrent.TimeUnit.SECONDS).build()
+                        cameraInstance?.cameraControl?.startFocusAndMetering(action)
+                        v.performClick()
+                        true
+                    } else {
+                        false
+                    }
+                }
                 previewView
             },
             modifier = Modifier.fillMaxSize()

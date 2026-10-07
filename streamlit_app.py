@@ -5,6 +5,7 @@ import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import streamlit as st
+import streamlit.components.v1 as components
 
 # --- Konfigurace stránky ---
 st.set_page_config(
@@ -13,6 +14,59 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed"
 )
+
+# --- Skript pro vynucení zadního fotoaparátu a automatického ostření na mobilech ---
+components.html("""
+<script>
+    function setupCameraConstraints() {
+        try {
+            const doc = window.parent.document;
+            // Nastaví capture="environment" na všechny file inputy pro přímé otevření zadního fotoaparátu
+            const inputs = doc.querySelectorAll('input[type="file"]');
+            inputs.forEach(inp => {
+                if (!inp.getAttribute('capture')) {
+                    inp.setAttribute('capture', 'environment');
+                }
+            });
+        } catch(e) {}
+    }
+
+    try {
+        const pNav = window.parent.navigator;
+        if (pNav && pNav.mediaDevices && pNav.mediaDevices.getUserMedia) {
+            const origGUM = pNav.mediaDevices.getUserMedia.bind(pNav.mediaDevices);
+            pNav.mediaDevices.getUserMedia = function(constraints) {
+                constraints = constraints || {};
+                if (!constraints.video) {
+                    constraints.video = {};
+                }
+                if (typeof constraints.video === 'boolean') {
+                    constraints.video = { 
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    };
+                } else {
+                    constraints.video.facingMode = { ideal: 'environment' };
+                    constraints.video.width = constraints.video.width || { ideal: 1920 };
+                    constraints.video.height = constraints.video.height || { ideal: 1080 };
+                }
+                return origGUM(constraints).then(stream => {
+                    const track = stream.getVideoTracks()[0];
+                    if (track && 'applyConstraints' in track) {
+                        track.applyConstraints({
+                            advanced: [{ focusMode: 'continuous' }]
+                        }).catch(() => {});
+                    }
+                    return stream;
+                });
+            };
+        }
+    } catch(e) {}
+
+    setInterval(setupCameraConstraints, 800);
+</script>
+""", height=0, width=0)
 
 # --- Vlastní CSS styly ---
 st.markdown("""
@@ -372,30 +426,37 @@ with st.sidebar:
 # --- Hlavní zobrazení ---
 st.markdown("<div class='main-header'><h1>🥗 NutriCheck AI</h1><p>Vyfoťte složení potraviny a zjistěte, zda je zdravá</p></div>", unsafe_allow_html=True)
 
-# Vstupy: Zadní fotoaparát vs Nahrání souboru vs Ukázka
-tab_camera, tab_upload, tab_sample = st.tabs([
-    "📷 Vyfotit fotoaparátem", 
-    "📁 Nahrát z galerie", 
+# Vstupy: Zadní fotoaparát s ostřením vs Přímý náhled v prohlížeči vs Ukázky
+tab_native, tab_browser, tab_sample = st.tabs([
+    "📸 Zadní fotoaparát (Doporučeno pro ostrý text)", 
+    "📹 Webkamera v prohlížeči", 
     "💡 Vyzkoušet ukázku"
 ])
 
 image_to_analyze = None
 
-with tab_camera:
-    st.markdown("##### 📸 Vyfotit zadním fotoaparátem mobilu")
-    st.info("💡 **Doporučení pro mobily:** Pro automatické spuštění zadního fotoaparátu můžete použít tlačítko níže:")
-    
-    # Streamlit camera input
-    camera_pic = st.camera_input("Zamiřte fotoaparát na složení:")
-    if camera_pic:
-        image_to_analyze = camera_pic.getvalue()
-
-with tab_upload:
-    st.markdown("##### 📁 Nahrát fotografii z telefonu")
-    st.caption("Na mobilu po kliknutí na tlačítko můžete přímo zvolit 'Fotoaparát' (otevře výchozí zadní kameru) nebo vybrat již vyfocenou fotku z galerie.")
-    uploaded_pic = st.file_uploader("Vyberte snímek etikety:", type=["jpg", "jpeg", "png", "webp"])
+with tab_native:
+    st.markdown("##### 📸 Spustit zadní fotoaparát vašeho telefonu")
+    st.success("""
+    🎯 **Doporučený postup pro ostrý a nezkreslený text:**
+    1. Klepněte na tlačítko níže ➔ na mobilu se přímo otevře **zadní systémový fotoaparát**.
+    2. **Klepněte prstem na displej telefonu na text etikety**, aby čočka opticky **zaostřila**.
+    3. Vyfoťte složení ze vzdálenosti cca 15–20 cm a potvrďte.
+    """)
+    uploaded_pic = st.file_uploader(
+        "Klepněte sem pro spuštění zadního fotoaparátu / výběr fotky:", 
+        type=["jpg", "jpeg", "png", "webp"],
+        key="rear_camera_uploader"
+    )
     if uploaded_pic:
         image_to_analyze = uploaded_pic.getvalue()
+
+with tab_browser:
+    st.markdown("##### 📹 Přímý náhled kamery v prohlížeči")
+    st.info("💡 Skript automaticky požaduje zadní kameru a průběžné ostření. Pokud přesto vidíte přední kameru, klepněte na ikonu otočení fotoaparátu **🔄** v rohu okna náhledu.")
+    camera_pic = st.camera_input("Zamiřte kameru na složení:", key="browser_camera_input")
+    if camera_pic:
+        image_to_analyze = camera_pic.getvalue()
 
 with tab_sample:
     st.write("Nemáte u sebe potravinu? Vyberte si ukázku s českou diakritikou:")
