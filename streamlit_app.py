@@ -75,10 +75,15 @@ def get_api_key():
     # 3. Zadaný uživatelem v postranním panelu
     return st.session_state.get("custom_api_key", "")
 
-# --- Volání Gemini REST API ---
-def analyze_food_with_gemini(image_bytes: bytes, api_key: str) -> dict:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
-    
+# --- Volání Gemini REST API s automatickým přepínáním modelů (Fallback proti chybě 503) ---
+MODELS_TO_TRY = [
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.5-flash",
+    "gemini-3.8-flash"
+]
+
+def analyze_food_with_gemini(image_bytes: bytes, api_key: str, preferred_model: str = "Automaticky") -> tuple[dict, str]:
     base64_img = base64.b64encode(image_bytes).decode("utf-8")
     
     prompt = """
@@ -144,32 +149,57 @@ def analyze_food_with_gemini(image_bytes: bytes, api_key: str) -> dict:
     }
 
     headers = {"Content-Type": "application/json"}
-    response = requests.post(url, json=payload, headers=headers, timeout=60)
     
-    if response.status_code != 200:
-        raise Exception(f"Chyba Gemini API ({response.status_code}): {response.text}")
-        
-    data = response.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
-        raise Exception("Gemini nevrátil žádnou odpověď.")
-        
-    text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-    
-    # Vyčištění případných markdown značek
-    cleaned = text_content.strip()
-    if cleaned.startswith("```json"):
-        cleaned = cleaned[7:]
-    elif cleaned.startswith("```"):
-        cleaned = cleaned[3:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-        
-    return json.loads(cleaned.strip())
+    # Seznam modelů k pokusu
+    candidate_models = [preferred_model] if preferred_model != "Automaticky" else MODELS_TO_TRY
+    if preferred_model != "Automaticky" and preferred_model not in candidate_models:
+        candidate_models = [preferred_model] + [m for m in MODELS_TO_TRY if m != preferred_model]
+    else:
+        candidate_models = MODELS_TO_TRY
+
+    last_error = None
+    for model_name in candidate_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+            
+            # Pokud model hlásí 503 (vytíženo) nebo 429 (limit), zkusíme okamžitě další model
+            if response.status_code in [503, 429]:
+                last_error = f"Model {model_name} je dočasně přetížen ({response.status_code})."
+                continue
+                
+            if response.status_code != 200:
+                last_error = f"Chyba Gemini API ({response.status_code}) u modelu {model_name}: {response.text}"
+                continue
+                
+            data = response.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                last_error = f"Model {model_name} nevrátil žádnou odpověď."
+                continue
+                
+            text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            
+            # Vyčištění případných markdown značek
+            cleaned = text_content.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+                
+            parsed_data = json.loads(cleaned.strip())
+            return parsed_data, model_name
+        except Exception as e:
+            last_error = str(e)
+            continue
+            
+    raise Exception(f"Nepodařilo se spojit s žádným modelem Gemini. Poslední hlášení: {last_error}")
 
 # --- Doplňující dotazy k produktu ---
-def ask_followup_question(analysis: dict, question: str, api_key: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+def ask_followup_question(analysis: dict, question: str, api_key: str, model: str = "gemini-flash-latest") -> str:
+    models = [model, "gemini-3.1-flash-lite-preview", "gemini-flash-latest"]
     prompt = f"""
     Jsi nutriční poradce. Uživatel analyzoval potravinu:
     - Produkt: {analysis.get('productName')}
@@ -185,9 +215,15 @@ def ask_followup_question(analysis: dict, question: str, api_key: str) -> str:
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.7}
     }
-    res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
-    if res.status_code == 200:
-        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+    
+    for m in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+        try:
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            if res.status_code == 200:
+                return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            continue
     return "Omlouvám se, na dotaz se nepodařilo odpovědět."
 
 # --- Pomocná funkce pro ukázkové štítky ---
@@ -229,6 +265,13 @@ with st.sidebar:
             configured_key = api_input
     else:
         st.success("✅ Gemini API klíč je aktivní")
+
+    model_choice = st.selectbox(
+        "🧠 Výběr modelu:",
+        ["Automaticky", "gemini-flash-latest", "gemini-3.1-flash-lite-preview", "gemini-3.5-flash", "gemini-3.8-flash"],
+        index=0,
+        help="Režim 'Automaticky' zkusí nejstabilnější model a při přetížení (503) se sám přepne na záložní."
+    )
         
     st.markdown("---")
     st.markdown("""
@@ -288,7 +331,8 @@ if image_to_analyze:
         
         with st.spinner("🤖 Gemini AI čte text z etikety, analyzuje nutrienty a ověřuje éčka..."):
             try:
-                res = analyze_food_with_gemini(image_to_analyze, api_key)
+                res, used_model = analyze_food_with_gemini(image_to_analyze, api_key, model_choice)
+                res["_used_model"] = used_model
                 st.session_state["last_analysis"] = res
             except Exception as e:
                 st.error(f"Chyba při analýze: {str(e)}")
@@ -299,6 +343,8 @@ if "last_analysis" in st.session_state:
     
     st.markdown("---")
     st.subheader(f"📋 Výsledek: {res.get('productName', 'Potravina')}")
+    if "_used_model" in res:
+        st.caption(f"⚡ Analyzováno modelem: `{res['_used_model']}`")
     
     score = res.get("healthScore", 50)
     verdict = res.get("verdict", "MODERATE")
